@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Anirudh Chandramouleeswaran | FP&amp;A and BI Analyst</title>
+  <meta name="description" content="Anirudh Chandramouleeswaran, FP&A and business intelligence analyst. Financial modeling, budgeting, forecasting, SQL, Python, R, Excel, and Power BI.">
+  <meta property="og:title" content="Anirudh Chandramouleeswaran | FP&A and BI Analyst">
+  <meta property="og:description" content="Financial modeling, budgeting, forecasting, and dashboards. Cut procurement costs 12%, raised gross profit 8%.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#F5F7FC">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232B59FF'/%3E%3Cpath d='M7 22 L13 15 L18 19 L25 9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='25' cy='9' r='3' fill='%23FF6B2C'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,500..800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="progress" aria-hidden="true"><span id="progressBar"></span></div>
+
+  <header class="top" id="top">
+    <div class="top-inner">
+      <a class="logo" href="#hero" aria-label="Back to start">
+        <span class="logo-mark" aria-hidden="true">AC</span>
+        <span class="logo-name">Anirudh C.</span>
+      </a>
+      <nav class="nav" id="nav" aria-label="Primary">
+        <a href="#impact">Impact</a>
+        <a href="#experience">Experience</a>
+        <a href="#projects">Projects</a>
+        <a href="#playground">Try it</a>
+        <a href="#skills">Skills</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark mode">
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+        </button>
+        <a class="btn btn-sm btn-primary hide-sm" id="topResume" href="assets/resume.pdf" download>Resume</a>
+        <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="hero" aria-labelledby="name">
+      <canvas class="hero-bg" id="heroBg" aria-hidden="true"></canvas>
+      <div class="wrap hero-inner">
+        <p class="status" id="status"></p>
+        <h1 class="name" id="name"><span class="n-first" id="nFirst"></span> <span class="n-last" id="nLast"></span></h1>
+        <p class="rotator"><span class="sr" id="roleSr"></span><span aria-hidden="true"><span id="rot"></span><span class="caret"></span></span></p>
+        <p class="summary" id="summary"></p>
+        <div class="actions" id="heroActions"></div>
+        <a class="scroll-cue" href="#impact" aria-label="Scroll to results"><span></span></a>
+      </div>
+    </section>
+
+    <div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
+
+    <section id="impact" class="wrap sec" aria-labelledby="h-impact">
+      <div class="sec-head">
+        <p class="kicker">01 · Impact</p>
+        <h2 id="h-impact">Results at a glance</h2>
+        <p class="sec-sub">Every number below comes from my resume. Tap a card to see how I got there.</p>
+      </div>
+      <div class="impact-grid" id="impactGrid"></div>
+    </section>
+
+    <section id="experience" class="wrap sec" aria-labelledby="h-exp">
+      <div class="sec-head">
+        <p class="kicker">02 · Experience</p>
+        <h2 id="h-exp">Where I've worked</h2>
+      </div>
+      <div class="lens" aria-labelledby="lensLabel">
+        <p class="lens-label" id="lensLabel">Hiring for</p>
+        <div class="lens-row" id="lensRow" role="group" aria-labelledby="lensLabel"></div>
+        <p class="lens-pitch" id="lensPitch" aria-live="polite"></p>
+      </div>
+      <div class="exp">
+        <div class="exp-tabs" id="expTabs" role="tablist" aria-label="Employers"></div>
+        <div class="exp-panel" id="expPanel" role="tabpanel"></div>
+      </div>
+    </section>
+
+    <section id="projects" class="wrap sec" aria-labelledby="h-proj">
+      <div class="sec-head">
+        <p class="kicker">03 · Projects</p>
+        <h2 id="h-proj">Things I've built</h2>
+      </div>
+      <div class="projects" id="projList"></div>
+    </section>
+
+    <section id="playground" class="wrap sec" aria-labelledby="h-play">
+      <div class="sec-head">
+        <p class="kicker">04 · Try it</p>
+        <h2 id="h-play">Play with the models</h2>
+        <p class="sec-sub">Two small, working versions of the kind of analysis I do.</p>
+      </div>
+      <div class="seg" role="tablist" aria-label="Interactive demos">
+        <button role="tab" id="tab-var" aria-controls="panel-var" aria-selected="true" type="button">Budget vs. actuals</button>
+        <button role="tab" id="tab-mc" aria-controls="panel-mc" aria-selected="false" tabindex="-1" type="button">Monte Carlo planner</button>
+      </div>
+      <div class="card panel" id="panel-var" role="tabpanel" aria-labelledby="tab-var"></div>
+      <div class="card panel" id="panel-mc" role="tabpanel" aria-labelledby="tab-mc" hidden></div>
+    </section>
+
+    <section id="skills" class="wrap sec" aria-labelledby="h-skills">
+      <div class="sec-head">
+        <p class="kicker">05 · Skills</p>
+        <h2 id="h-skills">Toolkit</h2>
+      </div>
+      <div class="skills" id="skillList"></div>
+    </section>
+
+    <section id="education" class="wrap sec" aria-labelledby="h-edu">
+      <div class="sec-head">
+        <p class="kicker">06 · Education</p>
+        <h2 id="h-edu">Education</h2>
+      </div>
+      <div class="edu" id="eduList"></div>
+    </section>
+
+    <section id="tt" class="wrap sec" aria-labelledby="h-tt">
+      <div class="tt card" id="ttBox"></div>
+    </section>
+
+    <section id="contact" class="wrap sec" aria-labelledby="h-contact">
+      <div class="contact" id="contactBox"></div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p id="footText"></p>
+    <a href="#hero">Back to top ↑</a>
+  </footer>
+
+  <button class="to-top" id="toTop" type="button" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <dialog id="story" aria-labelledby="storyTitle">
+    <div class="story" id="storyBody"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p class="wrap">This page needs JavaScript. You can still download the resume at <a href="assets/resume.pdf">assets/resume.pdf</a>.</p></noscript>
+  <script src="script.js"></script>
+</body>
+</html>
