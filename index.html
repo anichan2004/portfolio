@@ -75,14 +75,14 @@
         <p class="kicker">02 · Experience</p>
         <h2 id="h-exp">Where I've worked</h2>
       </div>
-      <div class="lens" aria-labelledby="lensLabel">
+      <div class="lens">
         <p class="lens-label" id="lensLabel">Hiring for</p>
         <div class="lens-row" id="lensRow" role="group" aria-labelledby="lensLabel"></div>
         <p class="lens-pitch" id="lensPitch" aria-live="polite"></p>
       </div>
       <div class="exp">
         <div class="exp-tabs" id="expTabs" role="tablist" aria-label="Employers"></div>
-        <div class="exp-panel" id="expPanel" role="tabpanel"></div>
+        <div class="exp-stage"><div class="exp-panel" id="expPanel" role="tabpanel"></div></div>
       </div>
     </section>
 
@@ -113,7 +113,13 @@
         <p class="kicker">05 · Skills</p>
         <h2 id="h-skills">Toolkit</h2>
       </div>
-      <div class="skills" id="skillList"></div>
+      <div class="skills-wrap">
+        <div class="sphere-box">
+          <div class="sphere" id="sphere" aria-hidden="true"></div>
+          <p class="sphere-hint">Move your cursor or finger across the sphere to spin it.</p>
+        </div>
+        <div class="skills" id="skillList"></div>
+      </div>
     </section>
 
     <section id="education" class="wrap sec" aria-labelledby="h-edu">
@@ -149,6 +155,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <noscript><p class="wrap">This page needs JavaScript. You can still download the resume at <a href="assets/resume.pdf">assets/resume.pdf</a>.</p></noscript>
+  <script src="three.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

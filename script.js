@@ -1,4 +1,4 @@
-/* All content comes from resume.json. Edit that file and push to update the site. */
+/* All content comes from resume.json. Edit that file to update the site. */
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -7,7 +7,6 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage may be blocked */ } }
 };
-const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 let toastT;
 function toast(msg) {
@@ -59,7 +58,7 @@ function fitName() {
   const h = $("name");
   h.classList.remove("stack");
   h.style.display = "";
-  const box = h.clientWidth; // content width of the hero column
+  const box = h.clientWidth;
   if (!box) return;
   h.style.fontSize = "100px";
   h.style.display = "inline-block";
@@ -72,7 +71,7 @@ function fitName() {
     h.style.fontSize = `${Math.min(oneLine * 0.985, 112)}px`;
   } else {
     h.classList.add("stack");
-    h.style.fontSize = `${Math.min((100 * box) / Math.max(first, last) * 0.985, 96)}px`;
+    h.style.fontSize = `${Math.min(((100 * box) / Math.max(first, last)) * 0.985, 96)}px`;
   }
 }
 
@@ -96,105 +95,149 @@ function startRotator(words) {
   tick();
 }
 
-// Animated "data lines" behind the hero. They drift slowly and lean toward the pointer.
-function heroCanvas() {
-  const cv = $("heroBg");
-  const ctx = cv.getContext("2d");
-  const hero = $("hero");
-  let W = 0, H = 0, colors = [], mx = 0.5, my = 0.5, tx = 0.5, ty = 0.5, running = false, visible = true, t0 = performance.now();
-  const lines = [
-    { c: "--primary", a: 0.42, base: 0.62, amp: 34, f: 0.0052, s: 0.32, ph: 0.2, depth: 30 },
-    { c: "--accent", a: 0.38, base: 0.74, amp: 26, f: 0.0068, s: 0.42, ph: 2.1, depth: 22 },
-    { c: "--good", a: 0.32, base: 0.84, amp: 20, f: 0.0082, s: 0.27, ph: 4.0, depth: 14 },
-    { c: "--primary", a: 0.18, base: 0.5, amp: 42, f: 0.0038, s: 0.2, ph: 1.3, depth: 40 }
-  ];
-  function readColors() { colors = lines.map((l) => cssVar(l.c)); }
+/* ================= 3D support check ================= */
+function has3D() {
+  if (typeof THREE === "undefined") return false;
+  try {
+    const c = document.createElement("canvas");
+    return !!(window.WebGLRenderingContext && (c.getContext("webgl") || c.getContext("experimental-webgl")));
+  } catch { return false; }
+}
+
+/* ================= 3D hero: a field of bars that grows like a chart ================= */
+function heroScene3D() {
+  const cv = $("heroBg"), hero = $("hero");
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+
+  const NX = 24, NZ = 12, GAP = 0.5;
+  const geo = new THREE.BoxGeometry(0.34, 1, 0.34);
+  geo.translate(0, 0.5, 0);
+  const bars = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.12 }), NX * NZ);
+  const group = new THREE.Group();
+  group.add(bars);
+  scene.add(group);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8fa0d8, 0.95));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+  sun.position.set(4, 9, 6);
+  scene.add(sun);
+
+  // An orange ball hops along the bars, a nod to table tennis.
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 28, 28),
+    new THREE.MeshStandardMaterial({ color: 0xff6b2c, roughness: 0.35, emissive: 0xff6b2c, emissiveIntensity: 0.3 })
+  );
+  group.add(ball);
+
+  const cA = new THREE.Color(0x2b59ff), cB = new THREE.Color(0x7a5cff), cC = new THREE.Color(0xff6b2c), col = new THREE.Color();
+  const dummy = new THREE.Object3D();
+  const heightAt = (i, k, t) => {
+    const u = i / (NX - 1);
+    return Math.max(0.12, 0.25 + u * u * 2.5 + 0.45 * Math.sin(i * 0.55 + t * 1.1) * (0.35 + u) + 0.3 * Math.cos(k * 0.7 + t * 0.8 + i * 0.2));
+  };
+
+  let mx = 0, my = 0, tx = 0, ty = 0, running = false, visible = true, small = false;
+  const t0 = performance.now();
+
   function size() {
-    const r = hero.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = r.width; H = r.height;
-    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = hero.clientWidth, h = hero.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    small = w < 860;
   }
-  function draw(t) {
+
+  function frame(t) {
     mx += (tx - mx) * 0.05; my += (ty - my) * 0.05;
-    ctx.clearRect(0, 0, W, H);
-    const xStart = W * 0.28;
-    lines.forEach((l, k) => {
-      ctx.beginPath();
-      let lastX = 0, lastY = 0;
-      for (let x = xStart; x <= W + 10; x += 8) {
-        const p = (x - xStart) / (W - xStart);
-        const y = H * l.base
-          + l.amp * Math.sin(x * l.f + t * l.s + l.ph)
-          + l.amp * 0.5 * Math.sin(x * l.f * 2.3 - t * l.s * 0.7)
-          - p * 60 * (k === 0 ? 1 : 0.6)
-          + (my - 0.5) * l.depth * p
-          + (mx - 0.5) * l.depth * 0.4;
-        x === xStart ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        lastX = x; lastY = y;
+    let n = 0;
+    for (let i = 0; i < NX; i++) {
+      for (let k = 0; k < NZ; k++) {
+        const h = heightAt(i, k, t);
+        dummy.position.set((i - (NX - 1) / 2) * GAP, 0, (k - (NZ - 1) / 2) * GAP);
+        dummy.scale.set(1, h, 1);
+        dummy.updateMatrix();
+        bars.setMatrixAt(n, dummy.matrix);
+        const p = Math.min(h / 3.2, 1);
+        if (p < 0.5) col.copy(cA).lerp(cB, p * 2); else col.copy(cB).lerp(cC, (p - 0.5) * 2);
+        bars.setColorAt(n, col);
+        n++;
       }
-      const g = ctx.createLinearGradient(xStart, 0, W, 0);
-      g.addColorStop(0, "transparent");
-      g.addColorStop(0.35, colors[k]);
-      g.addColorStop(1, colors[k]);
-      ctx.strokeStyle = g;
-      ctx.globalAlpha = l.a;
-      ctx.lineWidth = k === 0 ? 2.5 : 2;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    });
+    }
+    bars.instanceMatrix.needsUpdate = true;
+    if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
+
+    const bi = (t * 2.4) % (NX - 1), k0 = Math.floor(NZ / 2);
+    const i0 = Math.floor(bi), f = bi - i0;
+    const base = heightAt(i0, k0, t) * (1 - f) + heightAt(Math.min(i0 + 1, NX - 1), k0, t) * f;
+    ball.position.set((bi - (NX - 1) / 2) * GAP, base + 0.2 + Math.abs(Math.sin(f * Math.PI)) * 0.7, (k0 - (NZ - 1) / 2) * GAP);
+
+    const scroll = Math.min(window.scrollY / 700, 1);
+    if (small) {
+      // On phones the bars sit in the space below the text.
+      group.position.set(-1.2, 0, 0);
+      group.rotation.y = -0.45 + mx * 0.1 + scroll * 0.5;
+      camera.position.set(0, 9, 26);
+      camera.lookAt(0, 6.6, 0);
+    } else {
+      group.position.set(6.0, -3.3, 0);
+      group.rotation.y = -0.55 + mx * 0.14 + scroll * 0.6;
+      camera.position.set(-0.6 + mx * 0.9, 4.6 - my * 0.7 + scroll * 1.5, 12.5);
+      camera.lookAt(2.0, -1.0, 0);
+    }
+    renderer.render(scene, camera);
   }
   function loop(now) {
     if (!running) return;
-    draw((now - t0) / 1000);
+    frame((now - t0) / 1000);
     requestAnimationFrame(loop);
   }
-  function start() { if (reduceMotion || running || !visible || document.hidden) return; running = true; requestAnimationFrame(loop); }
-  function stop() { running = false; }
+  const start = () => { if (reduceMotion || running || !visible || document.hidden) return; running = true; requestAnimationFrame(loop); };
+  const stop = () => { running = false; };
 
-  readColors(); size(); draw(0); start();
-  window.addEventListener("resize", () => { size(); draw(0); });
+  size();
+  frame(0.6);
+  cv.classList.add("is-3d");
+  start();
+  window.addEventListener("resize", () => { size(); if (!running) frame(0.6); });
   hero.addEventListener("pointermove", (e) => {
     const r = hero.getBoundingClientRect();
-    tx = (e.clientX - r.left) / r.width; ty = (e.clientY - r.top) / r.height;
+    tx = (e.clientX - r.left) / r.width - 0.5; ty = (e.clientY - r.top) / r.height - 0.5;
   });
   new IntersectionObserver((en) => { visible = en[0].isIntersecting; visible ? start() : stop(); }).observe(hero);
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
-  document.addEventListener("themechange", () => { readColors(); draw(0); });
 }
 
 /* ================= Impact ================= */
-function fmtNum(v, dec) { return Number(v).toFixed(dec); }
-function decimalsOf(n) { const s = String(n); return s.includes(".") ? s.split(".")[1].length : 0; }
+const fmtNum = (v, dec) => Number(v).toFixed(dec);
+const decimalsOf = (n) => { const s = String(n); return s.includes(".") ? s.split(".")[1].length : 0; };
 
 function kpiCard(k, i) {
   let num = "", viz = "";
-  if (k.type === "beforeAfter") {
-    num = `<span data-count data-from="${k.from}" data-to="${k.to}" data-dec="${decimalsOf(k.to)}" data-suffix="${esc(k.unit)}">${k.from}${esc(k.unit)}</span>`;
-    viz = `<div class="bars">
-        <div class="bar-row"><span>Before</span><div class="bar"><i class="was" data-w="100"></i></div><b>${k.from}${esc(k.unit)}</b></div>
-        <div class="bar-row"><span>After</span><div class="bar"><i class="now" data-w="${((k.to / k.from) * 100).toFixed(1)}"></i></div><b>${k.to}${esc(k.unit)}</b></div>
-      </div>`;
-  } else if (k.type === "compare") {
-    num = `<span data-count data-from="${k.baseline}" data-to="${k.value}" data-dec="${decimalsOf(k.value)}" data-suffix="${esc(k.unit)}">${k.baseline}${esc(k.unit)}</span>`;
-    viz = `<div class="bars">
-        <div class="bar-row"><span>Baseline</span><div class="bar"><i class="was" data-w="100"></i></div><b>${k.baseline}${esc(k.unit)}</b></div>
-        <div class="bar-row"><span>${esc(k.where)}</span><div class="bar"><i class="now" data-w="${((k.value / k.baseline) * 100).toFixed(1)}"></i></div><b>${k.value}${esc(k.unit)}</b></div>
-      </div>`;
+  if (k.type === "beforeAfter" || k.type === "compare") {
+    const start = k.type === "beforeAfter" ? k.from : k.baseline;
+    const end = k.type === "beforeAfter" ? k.to : k.value;
+    const l1 = k.type === "beforeAfter" ? "Before" : "Baseline";
+    const l2 = k.type === "beforeAfter" ? "After" : k.where;
+    num = `<span data-count data-from="${start}" data-to="${end}" data-dec="${decimalsOf(end)}" data-suffix="${esc(k.unit)}">${start}${esc(k.unit)}</span>`;
+    viz = `<span class="bars">
+        <span class="bar-row"><span>${esc(l1)}</span><span class="bar"><i class="was" data-w="100"></i></span><b>${start}${esc(k.unit)}</b></span>
+        <span class="bar-row"><span>${esc(l2)}</span><span class="bar"><i class="now" data-w="${((end / start) * 100).toFixed(1)}"></i></span><b>${end}${esc(k.unit)}</b></span>
+      </span>`;
   } else if (k.type === "ring") {
     num = `<span data-count data-from="0" data-to="${k.value}" data-dec="${decimalsOf(k.value)}" data-prefix="${esc(k.prefix || "")}" data-suffix="${esc(k.unit)}">${esc(k.prefix || "")}${k.value}${esc(k.unit)}</span>`;
-    viz = `<div class="ring-wrap">
+    viz = `<span class="ring-wrap">
         <svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle class="rt" cx="32" cy="32" r="26"/><circle class="rv" cx="32" cy="32" r="26" pathLength="1" data-f="${k.value / 100}"/></svg>
-        <span class="ring-note">${esc(k.note || "")}</span>
-      </div>`;
-  } else if (k.type === "delta") {
+        <span class="kpi-note">${esc(k.note || "")}</span>
+      </span>`;
+  } else {
     const sign = k.dir === "down" ? "−" : "+";
-    num = `<span class="arrow good">${k.dir === "down" ? ICON.down : ICON.up}</span><span data-count data-from="0" data-to="${k.value}" data-dec="0" data-prefix="${sign}" data-suffix="${esc(k.unit)}">${sign}${k.value}${esc(k.unit)}</span>`;
-    viz = `<span class="delta-note">${esc(k.note || "")}</span>`;
+    num = `<span class="arrow">${k.dir === "down" ? ICON.down : ICON.up}</span><span data-count data-from="0" data-to="${k.value}" data-dec="0" data-prefix="${sign}" data-suffix="${esc(k.unit)}">${sign}${k.value}${esc(k.unit)}</span>`;
+    viz = `<span class="kpi-note">${esc(k.note || "")}</span>`;
   }
   return `
-    <button class="card kpi spot reveal" type="button" data-i="${i}" style="--d:${(i % 3) * 0.08}s"
+    <button class="card kpi spot reveal tilt" type="button" data-i="${i}" style="--d:${(i % 3) * 0.08}s"
       aria-label="${esc(k.label)}, ${esc(k.where)}. Open details.">
       <span class="kpi-top"><span class="kpi-where">${esc(k.where)}</span><span class="kpi-more">How ${ICON.arrowR}</span></span>
       <span class="kpi-num">${num}</span>
@@ -246,7 +289,7 @@ function renderImpact(list) {
 
 function openStory(k) {
   const s = k.story;
-  let big = "";
+  let big;
   if (k.type === "beforeAfter") big = `${k.from}${k.unit} → ${k.to}${k.unit}`;
   else if (k.type === "compare") big = `${k.value}${k.unit} vs ${k.baseline}${k.unit}`;
   else if (k.type === "ring") big = `${k.prefix || ""}${k.value}${k.unit}`;
@@ -264,29 +307,29 @@ function openStory(k) {
 }
 
 /* ================= Experience with hiring focus ================= */
-function bulletsHtml(list, cls = "blist") {
-  return `<ul class="${cls}">${list.map((b) => {
+function bulletsHtml(list) {
+  return `<ul class="blist">${list.map((b) => {
     const state = currentLens === "all" ? "" : (b.lens || []).includes(currentLens) ? "on" : "dim";
     return `<li data-lens="${esc((b.lens || []).join(" "))}" class="${state}">${highlightNums(b.t)}</li>`;
   }).join("")}</ul>`;
 }
 
 function renderExpTabs() {
-  const jobs = DATA.experience;
-  $("expTabs").innerHTML = jobs.map((j, i) => {
+  $("expTabs").innerHTML = DATA.experience.map((j, i) => {
     const n = currentLens === "all" ? 0 : j.bullets.filter((b) => (b.lens || []).includes(currentLens)).length;
     return `<button class="exp-tab" role="tab" type="button" id="jt-${i}" aria-controls="expPanel" aria-selected="${i === currentJob}" tabindex="${i === currentJob ? 0 : -1}" data-i="${i}">
-      ${n ? `<em class="match">${n} match${n > 1 ? "es" : ""}</em>` : ""}
+      ${n ? `<span class="match">${n} match${n > 1 ? "es" : ""}</span>` : ""}
       <b>${esc(j.short)}</b><span>${esc(j.title)}</span><span>${esc(j.start)} – ${esc(j.end)}</span>
     </button>`;
-  }).join("").replaceAll("<em class", "<span class").replaceAll("</em>", "</span>");
+  }).join("");
 }
 
 function renderExpPanel(animate) {
   const j = DATA.experience[currentJob];
   const p = $("expPanel");
   p.setAttribute("aria-labelledby", `jt-${currentJob}`);
-  p.className = "exp-panel card" + (animate ? " panel-in" : "");
+  p.className = "exp-panel card";
+  if (animate) { void p.offsetWidth; p.classList.add("flip-in"); }
   p.innerHTML = `
     <h3>${esc(j.title)}</h3>
     <p class="exp-meta"><strong>${esc(j.company)}</strong><span>${esc(j.start)} – ${esc(j.end)}</span><span>${esc(j.location)}</span></p>
@@ -337,7 +380,6 @@ function initLens() {
       currentJob = best;
     }
     renderExpTabs(); renderExpPanel(true);
-    // Projects and skills
     document.querySelectorAll("#projList [data-lens], #skillList [data-lens]").forEach((el) => {
       const tags = (el.dataset.lens || "").split(" ").filter(Boolean);
       el.classList.remove("dim", "on");
@@ -350,8 +392,8 @@ function initLens() {
 /* ================= Projects, skills, education ================= */
 function renderProjects(list) {
   $("projList").innerHTML = list.map((p, i) => `
-    <article class="card proj spot reveal${p.featured ? " featured" : ""}" style="--d:${i * 0.08}s">
-      ${p.featured ? `<span class="proj-tag">Featured project</span>` : `<span class="proj-tag">Research</span>`}
+    <article class="card proj spot reveal tilt${p.featured ? " featured" : ""}" data-tilt="2.5" style="--d:${i * 0.08}s">
+      <span class="proj-tag">${p.featured ? "Featured project" : "Research"}</span>
       <h3>${esc(p.name)}</h3>
       <p class="sub">${esc(p.subtitle)}</p>
       ${p.stats?.length ? `<div class="stats">${p.stats.map((s) => `<div class="stat"><b>${esc(s.v)}</b><span>${esc(s.k)}</span></div>`).join("")}</div>` : ""}
@@ -364,7 +406,7 @@ function renderProjects(list) {
 
 function renderSkills(list) {
   $("skillList").innerHTML = list.map((s, i) => `
-    <div class="card skill spot reveal" data-lens="${esc(s.lens.join(" "))}" style="--d:${(i % 3) * 0.06}s">
+    <div class="card skill spot reveal" data-lens="${esc(s.lens.join(" "))}" style="--d:${(i % 2) * 0.06}s">
       <h3>${esc(s.group)}</h3>
       <ul class="chips">${s.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
     </div>`).join("");
@@ -372,7 +414,7 @@ function renderSkills(list) {
 
 function renderEducation(list) {
   $("eduList").innerHTML = list.map((e, i) => `
-    <article class="card edu-item reveal" style="--d:${i * 0.08}s">
+    <article class="card edu-item reveal tilt" data-tilt="4" style="--d:${i * 0.08}s">
       <span class="edu-when">${esc(e.end)}</span>
       <h3>${esc(e.school)}</h3>
       ${e.unit ? `<p class="unit">${esc(e.unit)}</p>` : ""}
@@ -381,6 +423,60 @@ function renderEducation(list) {
       <p class="loc">${esc(e.location)}</p>
       ${e.note ? `<p class="note">${esc(e.note)}</p>` : ""}
     </article>`).join("");
+}
+
+/* ================= 3D skills sphere ================= */
+function initSphere(d) {
+  const box = $("sphere");
+  const seen = new Set(), items = [];
+  [...d.basics.tools, ...d.skills.flatMap((g) => g.items.slice(0, 2))].forEach((t) => {
+    const key = t.toLowerCase();
+    if (!seen.has(key) && items.length < 24) { seen.add(key); items.push(t); }
+  });
+  box.innerHTML = items.map((t, i) => `<span class="${i % 4 === 0 ? "a" : i % 4 === 2 ? "b" : ""}">${esc(t)}</span>`).join("");
+  const els = [...box.children], n = els.length;
+  // Spread the labels evenly over a sphere.
+  const pts = els.map((_, i) => {
+    const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
+    return { x: Math.cos(th) * r, y, z: Math.sin(th) * r };
+  });
+  const REST_X = 0.00012, REST_Y = 0.00045;
+  let ax = 0.3, ay = 0, vx = REST_X, vy = REST_Y, tvx = vx, tvy = vy, running = false, last = 0;
+  function paint() {
+    const R = box.clientWidth * 0.36;
+    const sx = Math.sin(ax), cx = Math.cos(ax), sy = Math.sin(ay), cy = Math.cos(ay);
+    pts.forEach((p, i) => {
+      const x1 = p.x * cy + p.z * sy, z1 = -p.x * sy + p.z * cy;
+      const y2 = p.y * cx - z1 * sx, z2 = p.y * sx + z1 * cx;
+      const depth = (z2 + 1) / 2;
+      const el = els[i];
+      el.style.transform = `translate(-50%, -50%) translate3d(${(x1 * R).toFixed(1)}px, ${(y2 * R).toFixed(1)}px, 0) scale(${(0.6 + depth * 0.5).toFixed(3)})`;
+      el.style.opacity = (0.2 + depth * 0.8).toFixed(2);
+      el.style.zIndex = String(Math.round(depth * 100));
+    });
+  }
+  function loop(t) {
+    if (!running) return;
+    const dt = Math.min(t - last, 50); last = t;
+    vx += (tvx - vx) * 0.06; vy += (tvy - vy) * 0.06;
+    ax += vx * dt; ay += vy * dt;
+    paint();
+    requestAnimationFrame(loop);
+  }
+  box.addEventListener("pointermove", (e) => {
+    const r = box.getBoundingClientRect();
+    tvy = ((e.clientX - r.left) / r.width - 0.5) * 0.004;
+    tvx = -((e.clientY - r.top) / r.height - 0.5) * 0.004;
+  });
+  box.addEventListener("pointerleave", () => { tvx = REST_X; tvy = REST_Y; });
+  paint();
+  window.addEventListener("resize", paint);
+  if (reduceMotion) return;
+  new IntersectionObserver((en) => {
+    const visible = en[0].isIntersecting;
+    if (visible && !running) { running = true; last = performance.now(); requestAnimationFrame(loop); }
+    if (!visible) running = false;
+  }).observe(box);
 }
 
 /* ================= Demo 1: budget vs actuals ================= */
@@ -568,7 +664,7 @@ function initMonteCarlo(cfg) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = Math.round(rect.width * dpr); cv.height = Math.round(rect.height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const W = rect.width, H = rect.height, pad = { l: 58, r: 16, t: 16, b: 30 };
+    const W = rect.width, H = rect.height, pad = { l: 58, r: 16, t: 34, b: 30 };
     const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, r = res, M = r.M;
     const yMax = Math.max(r.p90[M], 1) * 1.06;
     const X = (m) => pad.l + (m / M) * iw, Y = (v) => pad.t + ih - (v / yMax) * ih;
@@ -586,11 +682,17 @@ function initMonteCarlo(cfg) {
     ctx.beginPath(); for (let m = 0; m <= M; m++) ctx[m ? "lineTo" : "moveTo"](X(m), Y(r.start + r.monthly * m)); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = "#FF8A4C"; ctx.lineWidth = 2.5;
     ctx.beginPath(); for (let m = 0; m <= M; m++) ctx[m ? "lineTo" : "moveTo"](X(m), Y(r.p50[m])); ctx.stroke();
-    // legend
+    // Legend, kept above the plot area
     ctx.textAlign = "left"; ctx.font = "600 12px 'Instrument Sans', system-ui, sans-serif";
-    const lg = [["#FF8A4C", "Median"], ["rgba(110,140,255,.7)", "Middle 50%"], ["rgba(110,140,255,.35)", "Middle 80%"], ["rgba(255,255,255,.5)", "Money put in"]];
-    let lx = pad.l + 10;
-    lg.forEach(([c, t]) => { ctx.fillStyle = c; ctx.fillRect(lx, pad.t + 6, 12, 8); ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText(t, lx + 17, pad.t + 14); lx += ctx.measureText(t).width + 34; });
+    const lg = [["#FF8A4C", "Median"], ["rgba(110,140,255,.75)", "Middle 50%"], ["rgba(110,140,255,.4)", "Middle 80%"], ["rgba(255,255,255,.5)", "Money put in"]];
+    let lx = pad.l;
+    lg.forEach(([c, t]) => {
+      const w = ctx.measureText(t).width + 30;
+      if (lx + w > W - pad.r) return;
+      ctx.fillStyle = c; ctx.fillRect(lx, 12, 12, 8);
+      ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText(t, lx + 17, 20);
+      lx += w;
+    });
     if (hover !== null) {
       const x = X(hover);
       ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 1;
@@ -645,7 +747,7 @@ function initDemoTabs(mc) {
   });
 }
 
-/* ================= Table tennis ================= */
+/* ================= Table tennis (3D) ================= */
 function renderTT(tt) {
   $("ttBox").innerHTML = `
     <div>
@@ -655,110 +757,170 @@ function renderTT(tt) {
       <p class="big-l">${esc(tt.statLabel)}</p>
       <p class="txt">${esc(tt.text)}</p>
     </div>
-    <div class="game-box">
+    <div class="game-box" id="gameBox">
       <h3>${esc(tt.gameTitle)} <small id="bestLbl"></small></h3>
-      <canvas class="game" id="game" width="800" height="450" tabindex="0" role="application"
-        aria-label="Table tennis rally game. Move the paddle with the mouse, touch, or the up and down arrow keys. Press Enter to serve."></canvas>
+      <div class="game-wrap">
+        <canvas class="game" id="game" width="800" height="450" tabindex="0" role="application"
+          aria-label="Table tennis rally game. Move the paddle with the mouse, touch, or the arrow keys. Press Enter to serve."></canvas>
+        <div class="g-score" id="gScore"><b>0</b><span>RALLY</span></div>
+        <div class="g-msg" id="gMsg"><b></b><span></span></div>
+      </div>
       <p class="game-hint">${esc(tt.gameHint)}</p>
     </div>`;
 }
 
-function initGame() {
+function initGame3D() {
   const cv = $("game");
-  const ctx = cv.getContext("2d");
-  const W = cv.width, H = cv.height;
-  const M = 26;                       // table margin
-  const PX = 44, PW = 14, PH = 84, R = 9;
-  let state = "idle", py = H / 2, ty = H / 2, score = 0, flash = 0;
+  const scoreEl = $("gScore"), msgEl = $("gMsg");
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x0b1330);
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x0b1330, 13, 30);
+  const cam = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 80);
+  const L = 9, WD = 5;
+
+  // Table, lines, and a practice wall at the far end.
+  const table = new THREE.Mesh(new THREE.BoxGeometry(WD, 0.18, L), new THREE.MeshStandardMaterial({ color: 0x1f49c7, roughness: 0.5 }));
+  table.position.set(0, -0.09, -L / 2);
+  scene.add(table);
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const line = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), white); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.006, z); scene.add(m); };
+  line(WD, 0.08, 0, -0.04); line(WD, 0.08, 0, -L + 0.04);
+  line(0.08, L, -WD / 2 + 0.04, -L / 2); line(0.08, L, WD / 2 - 0.04, -L / 2); line(0.04, L, 0, -L / 2);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8ecf5, roughness: 0.8, emissive: 0xffb020, emissiveIntensity: 0 });
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(WD, 2.4, 0.2), wallMat);
+  wall.position.set(0, 1.2, -L - 0.1);
+  scene.add(wall);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x1a2340, roughness: 0.9 });
+  [[-2.1, -0.6], [2.1, -0.6], [-2.1, -L + 0.6], [2.1, -L + 0.6]].forEach(([x, z]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.5, 0.14), legMat);
+    leg.position.set(x, -0.93, z); scene.add(leg);
+  });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x101a3a, roughness: 1 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.68; scene.add(floor);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x1c2a5a, 0.95));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(3, 8, 5); scene.add(sun);
+
+  const ballM = new THREE.Mesh(new THREE.SphereGeometry(0.12, 24, 24), new THREE.MeshStandardMaterial({ color: 0xff8a3d, roughness: 0.4, emissive: 0xff6b2c, emissiveIntensity: 0.25 }));
+  scene.add(ballM);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 }));
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.012; scene.add(shadow);
+  const paddle = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.07, 40), new THREE.MeshStandardMaterial({ color: 0xd7263d, roughness: 0.6 }));
+  face.rotation.x = Math.PI / 2;
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.42, 0.08), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.7 }));
+  handle.position.y = -0.62;
+  paddle.add(face, handle);
+  paddle.position.set(0, 0.62, 0.25);
+  scene.add(paddle);
+
+  // Game logic runs on a flat 800 x 450 board; the 3D scene draws it in perspective.
+  // Board x runs from the paddle to the far wall, board y runs across the table.
+  const W = 800, H = 450, M = 26, PX = 44, PW = 14, PH = 84, R = 9;
+  const FAR = W - M - 10;
+  const across = (y) => ((y - H / 2) / (H - 2 * M)) * WD;
+  const depth = (x) => -((x - (PX + PW)) / (FAR - (PX + PW))) * L;
+  let state = "idle", py = H / 2, ty = H / 2, score = 0, flash = 0, pulse = 0;
   let best = Number(store.get("rallyBest")) || 0;
-  let ball = { x: 0, y: 0, vx: 0, vy: 0 };
-  const trail = [];
-  const keys = { up: false, down: false };
+  let ball = { x: PX + PW + 40, y: H / 2, vx: 0, vy: 0 };
+  const keys = { l: false, r: false };
   let running = false, visible = false, last = 0;
   const bestLbl = $("bestLbl");
   const setBest = () => (bestLbl.textContent = best ? `Your best: ${best}` : "");
   setBest();
 
+  function overlay() {
+    scoreEl.firstElementChild.textContent = String(score);
+    msgEl.hidden = state === "play";
+    msgEl.firstElementChild.textContent = state === "idle" ? "Click or tap to serve" : `Rally over: ${score}`;
+    msgEl.lastElementChild.textContent = state === "idle" ? "Move left and right to return the ball" : "Click or tap to play again";
+  }
   function serve() {
-    ball = { x: PX + PW + 40, y: py, vx: 360, vy: (Math.random() * 2 - 1) * 170 };
-    trail.length = 0; score = 0; state = "play";
+    ball = { x: PX + PW + 40, y: py, vx: 500, vy: (Math.random() * 2 - 1) * 200 };
+    score = 0; state = "play"; overlay();
   }
   function update(dt) {
-    if (keys.up) ty -= 520 * dt;
-    if (keys.down) ty += 520 * dt;
+    if (keys.l) ty -= 520 * dt;
+    if (keys.r) ty += 520 * dt;
     ty = Math.max(M + PH / 2, Math.min(H - M - PH / 2, ty));
     py += (ty - py) * Math.min(1, dt * 26);
     if (flash > 0) flash -= dt;
+    if (pulse > 0) pulse -= dt;
     if (state !== "play") return;
+    const prevX = ball.x;
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
-    trail.push({ x: ball.x, y: ball.y }); if (trail.length > 10) trail.shift();
     if (ball.y < M + R) { ball.y = M + R; ball.vy = Math.abs(ball.vy); }
     if (ball.y > H - M - R) { ball.y = H - M - R; ball.vy = -Math.abs(ball.vy); }
-    if (ball.x > W - M - 10 - R) { ball.x = W - M - 10 - R; ball.vx = -Math.abs(ball.vx); }
-    if (ball.vx < 0 && ball.x - R <= PX + PW && ball.x > PX - 6 && Math.abs(ball.y - py) <= PH / 2 + R) {
+    if (ball.x > FAR - R) { ball.x = FAR - R; ball.vx = -Math.abs(ball.vx); flash = 0.18; }
+    // Checked against where the ball started this frame, so a fast ball cannot skip through the paddle.
+    if (ball.vx < 0 && ball.x - R <= PX + PW && prevX > PX - 6 && Math.abs(ball.y - py) <= PH / 2 + R) {
       ball.x = PX + PW + R;
-      ball.vx = Math.min(Math.abs(ball.vx) * 1.06, 900);
-      const off = (ball.y - py) / (PH / 2);
-      ball.vy = Math.max(-480, Math.min(480, off * 380 + ball.vy * 0.25));
-      score++; flash = 0.15;
+      ball.vx = Math.min(Math.abs(ball.vx) * 1.05, 1050);
+      ball.vy = Math.max(-480, Math.min(480, ((ball.y - py) / (PH / 2)) * 380 + ball.vy * 0.25));
+      score++; pulse = 0.14;
       if (score > best) { best = score; store.set("rallyBest", String(best)); setBest(); }
+      overlay();
     }
-    if (ball.x < -R * 2) state = "over";
+    if (ball.x < -R * 6) { state = "over"; overlay(); }
   }
   function draw() {
-    // Table: classic blue top with white lines; the far half is folded up as a practice wall.
-    ctx.fillStyle = "#0E1A3D"; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#1F49C7"; ctx.fillRect(M, M, W - 2 * M, H - 2 * M);
-    const g = ctx.createRadialGradient(W * 0.4, H * 0.4, 40, W * 0.5, H * 0.5, W * 0.7);
-    g.addColorStop(0, "rgba(255,255,255,.08)"); g.addColorStop(1, "rgba(0,0,0,.18)");
-    ctx.fillStyle = g; ctx.fillRect(M, M, W - 2 * M, H - 2 * M);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 5; ctx.strokeRect(M, M, W - 2 * M, H - 2 * M);
-    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(M, H / 2); ctx.lineTo(W - M, H / 2); ctx.stroke();
-    ctx.fillStyle = flash > 0 ? "#FFB020" : "#E8ECF5"; ctx.fillRect(W - M - 10, M, 10, H - 2 * M);
-    // Score
-    ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.textAlign = "center";
-    ctx.font = "800 44px 'Bricolage Grotesque', system-ui, sans-serif";
-    ctx.fillText(String(score), W / 2, 86);
-    ctx.font = "600 15px 'Instrument Sans', system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.7)";
-    ctx.fillText("RALLY", W / 2, 108);
-    // Paddle
-    ctx.fillStyle = "#D7263D"; ctx.beginPath(); ctx.roundRect(PX, py - PH / 2, PW, PH, 7); ctx.fill();
-    ctx.fillStyle = "#7A3E1D"; ctx.fillRect(PX - 14, py - 5, 14, 10);
-    // Ball and trail
-    if (state !== "idle") {
-      trail.forEach((p, i) => { ctx.fillStyle = `rgba(255,140,60,${(i / trail.length) * 0.35})`; ctx.beginPath(); ctx.arc(p.x, p.y, R * (0.4 + i / trail.length * 0.5), 0, 7); ctx.fill(); });
-      ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(ball.x + 4, ball.y + 6, R, R * 0.7, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = "#FF8A3D"; ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, 7); ctx.fill();
-    }
-    if (state !== "play") {
-      ctx.fillStyle = "rgba(10,15,30,.62)"; ctx.fillRect(M, H / 2 - 62, W - 2 * M, 124);
-      ctx.fillStyle = "#fff"; ctx.font = "800 38px 'Bricolage Grotesque', system-ui, sans-serif";
-      ctx.fillText(state === "idle" ? "Click or press Enter to serve" : `Rally over: ${score}`, W / 2, H / 2 - 4);
-      ctx.font = "500 18px 'Instrument Sans', system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.8)";
-      ctx.fillText(state === "idle" ? "Move up and down to return the ball" : "Click or press Enter to play again", W / 2, H / 2 + 30);
-    }
+    const px = across(py);
+    paddle.position.x = px;
+    paddle.rotation.z = -px * 0.08;
+    const s = 1 + Math.max(pulse, 0) * 1.6;
+    paddle.scale.set(s, s, 1);
+    const bx = across(ball.y), bz = depth(ball.x), d = -bz / L;
+    const by = d >= 0 ? 0.12 + 0.52 * Math.abs(Math.cos(Math.PI * d * 1.1)) : Math.max(-1.4, 0.64 + d * 6);
+    ballM.visible = state !== "idle";
+    ballM.position.set(bx, by, bz);
+    shadow.visible = state !== "idle" && d >= 0;
+    shadow.position.x = bx; shadow.position.z = bz;
+    const sc = 1 - Math.min(by, 0.7) * 0.5;
+    shadow.scale.set(sc, sc, 1);
+    wallMat.emissiveIntensity = flash > 0 ? 0.9 : 0;
+    cam.position.set(px * 0.32, 3.05, 4.9);
+    cam.lookAt(px * 0.14, 0.3, -3.6);
+    renderer.render(scene, cam);
+  }
+  function size() {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    cam.aspect = w / h; cam.updateProjectionMatrix();
   }
   function frame(t) {
     if (!running) return;
     const dt = Math.min((t - last) / 1000, 0.033) || 0.016; last = t;
     update(dt); draw();
-    if (state === "play" || Math.abs(ty - py) > 0.5 || keys.up || keys.down || flash > 0) requestAnimationFrame(frame);
+    if (state === "play" || Math.abs(ty - py) > 0.5 || keys.l || keys.r || flash > 0 || pulse > 0) requestAnimationFrame(frame);
     else running = false;
   }
   function kick() { if (!visible) { draw(); return; } if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } }
-  const setY = (e) => { const r = cv.getBoundingClientRect(); ty = ((e.clientY - r.top) / r.height) * H; kick(); };
-  cv.addEventListener("pointermove", setY);
-  cv.addEventListener("pointerdown", (e) => { setY(e); if (state !== "play") serve(); kick(); });
+
+  // The near edge of the table is narrower than the view, so scale pointer travel to match.
+  const setX = (e) => {
+    const r = cv.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width - 0.5;
+    const viewW = 2 * 5.7 * Math.tan((23 * Math.PI) / 180) * (r.width / r.height);
+    ty = H / 2 + ((fx * viewW) / WD) * (H - 2 * M);
+    kick();
+  };
+  cv.addEventListener("pointermove", setX);
+  cv.addEventListener("pointerdown", (e) => { setX(e); if (state !== "play") serve(); kick(); });
   cv.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowUp") { keys.up = true; e.preventDefault(); kick(); }
-    else if (e.key === "ArrowDown") { keys.down = true; e.preventDefault(); kick(); }
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") { keys.l = true; e.preventDefault(); kick(); }
+    else if (e.key === "ArrowRight" || e.key === "ArrowDown") { keys.r = true; e.preventDefault(); kick(); }
     else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (state !== "play") serve(); kick(); }
   });
-  cv.addEventListener("keyup", (e) => { if (e.key === "ArrowUp") keys.up = false; if (e.key === "ArrowDown") keys.down = false; });
-  cv.addEventListener("blur", () => (keys.up = keys.down = false));
-  new IntersectionObserver((en) => { visible = en[0].isIntersecting; visible ? kick() : (running = false); }, { threshold: 0.25 }).observe(cv);
-  if (document.fonts) document.fonts.ready.then(draw);
-  draw();
+  cv.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") keys.l = false;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") keys.r = false;
+  });
+  cv.addEventListener("blur", () => (keys.l = keys.r = false));
+  window.addEventListener("resize", () => { size(); draw(); });
+  new IntersectionObserver((en) => { visible = en[0].isIntersecting; if (visible) { size(); draw(); kick(); } else running = false; }, { threshold: 0.2 }).observe(cv);
+  size(); overlay(); draw();
 }
 
 /* ================= Contact ================= */
@@ -792,7 +954,6 @@ function initChrome() {
     root.dataset.theme = t;
     btn.setAttribute("aria-label", t === "dark" ? "Switch to light mode" : "Switch to dark mode");
     if (meta) meta.content = t === "dark" ? "#0A0F1E" : "#F5F7FC";
-    document.dispatchEvent(new Event("themechange"));
   };
   const saved = store.get("theme");
   apply(saved === "dark" || saved === "light" ? saved : mq.matches ? "dark" : "light");
@@ -828,19 +989,37 @@ function initChrome() {
   }), { rootMargin: "-40% 0px -55% 0px" });
   ["impact", "experience", "projects", "playground", "skills", "education", "tt", "contact"].forEach((id) => $(id) && spy.observe($(id)));
 
-  // Reveal on scroll
-  document.querySelectorAll(".sec-head, .lens, .exp, .seg, .contact, .tt").forEach((el) => el.classList.add("reveal"));
-  const rev = new IntersectionObserver((en) => en.forEach((x) => { if (x.isIntersecting) { x.target.classList.add("in"); rev.unobserve(x.target); } }), { threshold: 0.12 });
+  // Reveal on scroll. Once a card has finished arriving it is marked ready, so the tilt effect can take over.
+  document.querySelectorAll(".sec-head, .lens, .exp, .seg, .sphere-box, .contact, .tt").forEach((el) => el.classList.add("reveal"));
+  const rev = new IntersectionObserver((en) => en.forEach((x) => {
+    if (!x.isIntersecting) return;
+    x.target.classList.add("in");
+    rev.unobserve(x.target);
+    setTimeout(() => x.target.classList.add("ready"), 1100);
+  }), { threshold: 0.1 });
   document.querySelectorAll(".reveal").forEach((el) => rev.observe(el));
 
-  // Spotlight that follows the pointer on cards
+  // Spotlight and 3D tilt that follow the pointer on cards
+  const canHover = window.matchMedia("(hover: hover)").matches;
+  let tilted = null;
+  const untilt = () => { if (tilted) { tilted.style.setProperty("--rx", "0deg"); tilted.style.setProperty("--ry", "0deg"); tilted = null; } };
   document.addEventListener("pointermove", (e) => {
-    const c = e.target.closest?.(".spot");
+    const s = e.target.closest?.(".spot");
+    if (s) {
+      const r = s.getBoundingClientRect();
+      s.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      s.style.setProperty("--my", `${e.clientY - r.top}px`);
+    }
+    if (reduceMotion || !canHover) return;
+    const c = e.target.closest?.(".tilt.ready");
+    if (tilted && tilted !== c) untilt();
     if (!c) return;
-    const r = c.getBoundingClientRect();
-    c.style.setProperty("--mx", `${e.clientX - r.left}px`);
-    c.style.setProperty("--my", `${e.clientY - r.top}px`);
+    tilted = c;
+    const r = c.getBoundingClientRect(), max = Number(c.dataset.tilt || 6);
+    c.style.setProperty("--ry", `${(((e.clientX - r.left) / r.width - 0.5) * 2 * max).toFixed(2)}deg`);
+    c.style.setProperty("--rx", `${(-((e.clientY - r.top) / r.height - 0.5) * 2 * max).toFixed(2)}deg`);
   }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", untilt);
 
   // Story drawer close
   const dlg = $("story");
@@ -868,11 +1047,17 @@ fetch("resume.json", { cache: "no-cache" })
     initLens();
     initVariance(d.playground.variance);
     initDemoTabs(initMonteCarlo(d.playground.monteCarlo));
+    initSphere(d);
     renderTT(d.tableTennis);
-    initGame();
     renderContact(d.basics);
     initChrome();
-    heroCanvas();
+
+    // 3D parts. If a device has 3D graphics switched off, the hero keeps its plain gradient and the game is hidden.
+    const ok = has3D();
+    if (ok) { try { heroScene3D(); } catch (e) { console.warn("3D hero unavailable", e); } }
+    let gameOK = false;
+    if (ok) { try { initGame3D(); gameOK = true; } catch (e) { console.warn("3D game unavailable", e); } }
+    if (!gameOK) $("gameBox").hidden = true;
   })
   .catch((e) => {
     const p = document.createElement("p");
