@@ -8,7 +8,7 @@
     "summary": "Early-career FP&A and BI analyst with experience across procurement, commodity markets, and payments data. I build financial models, budgets, forecasts, and dashboards in SQL, Python, R, Excel, and Power BI.",
     "location": "Durham, NC",
     "email": "anirudhchandramouleeswaran@gmail.com",
-    "resume": "assets/resume.pdf",
+    "resume": "resume.pdf",
     "linkedin": "https://www.linkedin.com/in/anirudh-chandramouleeswaran/",
     "tools": ["SQL", "Python", "R", "Excel", "Power BI", "Tableau", "DAX", "pandas", "scikit-learn", "Redshift", "Financial modeling", "Forecasting", "Variance analysis", "Monte Carlo", "A/B testing", "DCF analysis"]
   },
@@ -172,7 +172,7 @@
       "subtitle": "Undergraduate dissertation, Shiv Nadar University",
       "featured": false,
       "stats": [ { "v": "30–40", "k": "most debt-prone age group" } ],
-      "links": [ { "label": "Read the paper", "url": "assets/credit-card-research.pdf" } ],
+      "links": [ { "label": "Read the paper", "url": "credit-card-research.pdf" } ],
       "bullets": [
         { "t": "Performed statistical modeling and machine learning analysis in Python (pandas, scikit-learn) and SQL, applying feature engineering and model evaluation to identify elevated-risk debt accumulation patterns and consumer overspending drivers.", "lens": ["data"] },
         { "t": "Applied segmentation analysis to identify the 30–40 age group as the most debt-prone segment, and distilled the psychological factors influencing credit card usage and repayment behavior to inform targeted financial interventions.", "lens": ["data", "bi"] }
